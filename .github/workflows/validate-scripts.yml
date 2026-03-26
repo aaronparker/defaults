@@ -87,7 +87,7 @@ jobs:
       - name: Upload to Codecov
         id: codecov
         if: always()
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./CodeCoverage.xml
