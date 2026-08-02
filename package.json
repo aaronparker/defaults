@@ -8,6 +8,6 @@
     "docs:preview": "vitepress preview"
   },
   "dependencies": {
-    "markdown-it-deflist": "^3.0.1"
+    "markdown-it-deflist": "^4.0.0"
   }
 }
