@@ -225,6 +225,8 @@ The repository includes a read-only WPF viewer script to inspect configuration f
 
 The viewer reads JSON files from `src\configs`, shows all available profiles in a list, and renders each section with a user-friendly detail panel. Item-level descriptions are shown from `note` fields where available and from the configuration schema where possible.
 
+The viewer opens using the current Windows light or dark app theme, and includes a ☀/🌙 toggle button in the header to switch between the two Fluent UI for Windows 11 themes at any time.
+
 ![](/img/configviewer.png)
 
 ## Other Configurations

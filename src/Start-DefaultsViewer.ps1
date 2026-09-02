@@ -926,9 +926,10 @@ $theme = $script:theme
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
                     <Button Name="ThemeToggleButton"
-                            Content="$( if ($script:themeMode -eq "Dark") { [System.Char]::ConvertFromUtf32(0x1F319) } else { [System.Char]::ConvertFromUtf32(0x2600) } )"
+                            Content="$( if ($script:themeMode -eq "Dark") { "&#xE708;" } else { "&#xE706;" } )"
                             ToolTip="$( if ($script:themeMode -eq "Dark") { "Switch to light theme" } else { "Switch to dark theme" } )"
                             Style="{StaticResource FluentButton}"
+                            FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                             Height="28"
                             Width="32"
                             Padding="0"
@@ -1444,11 +1445,11 @@ function Set-AppTheme {
     }
 
     if ($Mode -eq "Dark") {
-        $themeToggleButton.Content = [System.Char]::ConvertFromUtf32(0x1F319)
+        $themeToggleButton.Content = [System.String] [System.Char] 0xE708
         $themeToggleButton.ToolTip = "Switch to light theme"
     }
     else {
-        $themeToggleButton.Content = [System.Char]::ConvertFromUtf32(0x2600)
+        $themeToggleButton.Content = [System.String] [System.Char] 0xE706
         $themeToggleButton.ToolTip = "Switch to dark theme"
     }
 
