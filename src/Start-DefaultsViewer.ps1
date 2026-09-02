@@ -29,6 +29,7 @@ public static class DwmHelper {
     [DllImport("dwmapi.dll")]
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
     public const int DWMWA_CAPTION_COLOR = 35;
+    public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
 }
 "@
 
@@ -300,6 +301,7 @@ function New-ItemExpander {
     $expander.Background = $Theme.SectionBackgroundBrush
     $expander.BorderBrush = $Theme.BorderBrush
     $expander.BorderThickness = [System.Windows.Thickness]::new(1)
+    $expander.Foreground = $Theme.PrimaryTextBrush
 
     $contentPanel = [System.Windows.Controls.StackPanel]::new()
 
@@ -521,19 +523,86 @@ function Get-ConfigEntry {
     return ,$entries
 }
 
-# Windows 11 Fluent / WinUI 3 design token colours
-$theme = @{
-    PrimaryTextBrush       = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(27, 27, 27))    # #1B1B1B  TextPrimary
-    SubtleTextBrush        = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(96, 96, 96))     # #606060  TextSecondary
-    MutedBrush             = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(138, 138, 138))  # #8A8A8A  TextTertiary
-    CardBrush              = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(255, 255, 255))  # #FFFFFF  LayerFillDefault
-    BorderBrush            = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(224, 224, 224))  # #E0E0E0  StrokeCardDefault
-    WindowBrush            = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(243, 243, 243))  # #F3F3F3  MicaBase
-    SectionBackgroundBrush = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(250, 250, 250))  # #FAFAFA  SubtleFillSecondary
-    BadgeBrush             = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(204, 228, 247))  # #CCE4F7  AccentLight3
-    CalloutBrush           = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(245, 245, 245))  # #F5F5F5  SubtleFillDefault
-    ErrorBrush             = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(196, 43, 28))    # #C42B1C  SystemCritical
+function Get-ThemeBrushes {
+    # Windows 11 Fluent / WinUI 3 design token colours for the Light and Dark themes
+    param(
+        [ValidateSet("Light", "Dark")]
+        [System.String] $Mode = "Light"
+    )
+
+    function New-Brush {
+        param([System.Byte] $R, [System.Byte] $G, [System.Byte] $B)
+        return [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb($R, $G, $B))
+    }
+
+    if ($Mode -eq "Dark") {
+        return @{
+            PrimaryTextBrush        = New-Brush 255 255 255  # #FFFFFF  TextPrimary
+            SubtleTextBrush         = New-Brush 197 197 197   # #C5C5C5  TextSecondary
+            MutedBrush              = New-Brush 157 157 157   # #9D9D9D  TextTertiary
+            CardBrush               = New-Brush 44 44 44      # #2C2C2C  LayerFillDefault
+            BorderBrush             = New-Brush 59 59 59      # #3B3B3B  StrokeCardDefault
+            WindowBrush             = New-Brush 32 32 32      # #202020  MicaBase
+            SectionBackgroundBrush  = New-Brush 41 41 41      # #292929  SubtleFillSecondary
+            BadgeBrush              = New-Brush 15 58 87      # #0F3A57  AccentLight3 (dark)
+            BadgeHoverBrush         = New-Brush 21 74 112     # #154A70  AccentLight3 hover (dark)
+            CalloutBrush            = New-Brush 51 51 51      # #333333  SubtleFillDefault
+            ErrorBrush              = New-Brush 255 153 164   # #FF99A4  SystemCritical (dark)
+            ErrorCardBackgroundBrush = New-Brush 68 39 38     # #442726
+            ErrorCardBorderBrush    = New-Brush 241 112 122   # #F1707A
+        }
+    }
+
+    return @{
+        PrimaryTextBrush        = New-Brush 27 27 27      # #1B1B1B  TextPrimary
+        SubtleTextBrush         = New-Brush 96 96 96      # #606060  TextSecondary
+        MutedBrush              = New-Brush 138 138 138   # #8A8A8A  TextTertiary
+        CardBrush               = New-Brush 255 255 255   # #FFFFFF  LayerFillDefault
+        BorderBrush             = New-Brush 224 224 224   # #E0E0E0  StrokeCardDefault
+        WindowBrush             = New-Brush 243 243 243   # #F3F3F3  MicaBase
+        SectionBackgroundBrush  = New-Brush 250 250 250   # #FAFAFA  SubtleFillSecondary
+        BadgeBrush              = New-Brush 204 228 247   # #CCE4F7  AccentLight3
+        BadgeHoverBrush         = New-Brush 184 217 240   # #B8D9F0  AccentLight3 hover
+        CalloutBrush            = New-Brush 245 245 245   # #F5F5F5  SubtleFillDefault
+        ErrorBrush              = New-Brush 196 43 28     # #C42B1C  SystemCritical
+        ErrorCardBackgroundBrush = New-Brush 254 226 226  # #FEE2E2
+        ErrorCardBorderBrush    = New-Brush 248 113 113   # #F87171
+    }
 }
+
+function Get-SystemThemeMode {
+    # Reads the current Windows "app mode" (light/dark) from the registry so the viewer
+    # can default to the same theme as the rest of the OS. Falls back to "Light" on
+    # Server SKUs or if the value/key does not exist.
+    $registryPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+
+    try {
+        $appsUseLightTheme = Get-ItemPropertyValue -Path $registryPath -Name "AppsUseLightTheme" -ErrorAction "Stop"
+        if ($appsUseLightTheme -eq 0) {
+            return "Dark"
+        }
+    }
+    catch {
+        # Value or key not present (e.g. Windows Server); default to Light
+    }
+
+    return "Light"
+}
+
+function ConvertTo-HexColor {
+    # Renders a SolidColorBrush back to a "#RRGGBB" string for embedding into the XAML
+    # resource dictionary seed values.
+    param(
+        [System.Windows.Media.SolidColorBrush] $Brush
+    )
+
+    $color = $Brush.Color
+    return ("#{0:X2}{1:X2}{2:X2}" -f $color.R, $color.G, $color.B)
+}
+
+$script:themeMode = Get-SystemThemeMode
+$script:theme = Get-ThemeBrushes -Mode $script:themeMode
+$theme = $script:theme
 
 [xml] $windowXaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -545,9 +614,24 @@ $theme = @{
         MinHeight="680"
         WindowStartupLocation="CenterScreen"
         FontFamily="Segoe UI Variable Text, Segoe UI"
-        Background="#F3F3F3"
+        Background="{DynamicResource Brush.Window}"
         UseLayoutRounding="True">
     <Window.Resources>
+
+        <SolidColorBrush x:Key="Brush.PrimaryText" Color="$(ConvertTo-HexColor $script:theme.PrimaryTextBrush)" />
+        <SolidColorBrush x:Key="Brush.SubtleText" Color="$(ConvertTo-HexColor $script:theme.SubtleTextBrush)" />
+        <SolidColorBrush x:Key="Brush.Muted" Color="$(ConvertTo-HexColor $script:theme.MutedBrush)" />
+        <SolidColorBrush x:Key="Brush.Card" Color="$(ConvertTo-HexColor $script:theme.CardBrush)" />
+        <SolidColorBrush x:Key="Brush.Border" Color="$(ConvertTo-HexColor $script:theme.BorderBrush)" />
+        <SolidColorBrush x:Key="Brush.Window" Color="$(ConvertTo-HexColor $script:theme.WindowBrush)" />
+        <SolidColorBrush x:Key="Brush.SectionBackground" Color="$(ConvertTo-HexColor $script:theme.SectionBackgroundBrush)" />
+        <SolidColorBrush x:Key="Brush.Badge" Color="$(ConvertTo-HexColor $script:theme.BadgeBrush)" />
+        <SolidColorBrush x:Key="Brush.BadgeHover" Color="$(ConvertTo-HexColor $script:theme.BadgeHoverBrush)" />
+        <SolidColorBrush x:Key="Brush.Callout" Color="$(ConvertTo-HexColor $script:theme.CalloutBrush)" />
+        <SolidColorBrush x:Key="Brush.Error" Color="$(ConvertTo-HexColor $script:theme.ErrorBrush)" />
+        <SolidColorBrush x:Key="Brush.ErrorCardBackground" Color="$(ConvertTo-HexColor $script:theme.ErrorCardBackgroundBrush)" />
+        <SolidColorBrush x:Key="Brush.ErrorCardBorder" Color="$(ConvertTo-HexColor $script:theme.ErrorCardBorderBrush)" />
+        <SolidColorBrush x:Key="Brush.Accent" Color="#0078D4" />
 
         <!-- Fluent ScrollBar thumb: rounded, colour-reactive -->
         <Style x:Key="FluentScrollThumb" TargetType="Thumb">
@@ -555,13 +639,13 @@ $theme = @{
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Thumb">
-                        <Border Name="ThumbFill" Background="#8A8A8A" CornerRadius="3" />
+                        <Border Name="ThumbFill" Background="{DynamicResource Brush.Muted}" CornerRadius="3" />
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ThumbFill" Property="Background" Value="#606060" />
+                                <Setter TargetName="ThumbFill" Property="Background" Value="{DynamicResource Brush.SubtleText}" />
                             </Trigger>
                             <Trigger Property="IsDragging" Value="True">
-                                <Setter TargetName="ThumbFill" Property="Background" Value="#1B1B1B" />
+                                <Setter TargetName="ThumbFill" Property="Background" Value="{DynamicResource Brush.PrimaryText}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -611,14 +695,14 @@ $theme = @{
             </Setter>
         </Style>
 
-        <!-- Fluent ListBoxItem: Transparent default, #F5F5F5 hover, #CCE4F7 selected -->
+        <!-- Fluent ListBoxItem: Transparent default, callout hover, badge selected -->
         <Style x:Key="FluentListBoxItem" TargetType="ListBoxItem">
             <Setter Property="Padding" Value="10,8" />
             <Setter Property="Margin" Value="0,1" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="FontSize" Value="13" />
-            <Setter Property="Foreground" Value="#1B1B1B" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.PrimaryText}" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Template">
                 <Setter.Value>
@@ -631,17 +715,17 @@ $theme = @{
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="#F5F5F5" />
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Brush.Callout}" />
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="#CCE4F7" />
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Brush.Badge}" />
                             </Trigger>
                             <MultiTrigger>
                                 <MultiTrigger.Conditions>
                                     <Condition Property="IsSelected" Value="True" />
                                     <Condition Property="IsMouseOver" Value="True" />
                                 </MultiTrigger.Conditions>
-                                <Setter TargetName="ItemBorder" Property="Background" Value="#B8D9F0" />
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Brush.BadgeHover}" />
                             </MultiTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -663,7 +747,7 @@ $theme = @{
                                 CornerRadius="4">
                             <Path Name="Arrow"
                                   Data="M 0 0 L 4 4 L 8 0"
-                                  Stroke="#606060"
+                                  Stroke="{DynamicResource Brush.SubtleText}"
                                   StrokeThickness="1.5"
                                   HorizontalAlignment="Right"
                                   VerticalAlignment="Center"
@@ -672,11 +756,11 @@ $theme = @{
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ToggleBorder" Property="Background" Value="#F5F5F5" />
-                                <Setter TargetName="ToggleBorder" Property="BorderBrush" Value="#8A8A8A" />
+                                <Setter TargetName="ToggleBorder" Property="Background" Value="{DynamicResource Brush.Callout}" />
+                                <Setter TargetName="ToggleBorder" Property="BorderBrush" Value="{DynamicResource Brush.Muted}" />
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="ToggleBorder" Property="BorderBrush" Value="#0078D4" />
+                                <Setter TargetName="ToggleBorder" Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -688,7 +772,7 @@ $theme = @{
         <Style x:Key="FluentComboBoxItem" TargetType="ComboBoxItem">
             <Setter Property="Padding" Value="10,6" />
             <Setter Property="FontSize" Value="13" />
-            <Setter Property="Foreground" Value="#1B1B1B" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.PrimaryText}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBoxItem">
@@ -701,17 +785,17 @@ $theme = @{
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="#F5F5F5" />
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Brush.Callout}" />
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="#CCE4F7" />
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Brush.Badge}" />
                             </Trigger>
                             <MultiTrigger>
                                 <MultiTrigger.Conditions>
                                     <Condition Property="IsSelected" Value="True" />
                                     <Condition Property="IsHighlighted" Value="True" />
                                 </MultiTrigger.Conditions>
-                                <Setter TargetName="ItemBorder" Property="Background" Value="#B8D9F0" />
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Brush.BadgeHover}" />
                             </MultiTrigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -724,9 +808,9 @@ $theme = @{
             <Setter Property="Height" Value="32" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="FontSize" Value="13" />
-            <Setter Property="Foreground" Value="#1B1B1B" />
-            <Setter Property="Background" Value="#FFFFFF" />
-            <Setter Property="BorderBrush" Value="#E0E0E0" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.PrimaryText}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Card}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="ItemContainerStyle" Value="{StaticResource FluentComboBoxItem}" />
             <Setter Property="Template">
@@ -754,8 +838,8 @@ $theme = @{
                                 <Border Name="DropDownBorder"
                                         MinWidth="{TemplateBinding ActualWidth}"
                                         MaxHeight="300"
-                                        Background="#FFFFFF"
-                                        BorderBrush="#E0E0E0"
+                                        Background="{DynamicResource Brush.Card}"
+                                        BorderBrush="{DynamicResource Brush.Border}"
                                         BorderThickness="1"
                                         CornerRadius="4"
                                         Margin="0,2,0,0">
@@ -775,9 +859,9 @@ $theme = @{
             <Setter Property="Height" Value="32" />
             <Setter Property="Padding" Value="12,0" />
             <Setter Property="FontSize" Value="13" />
-            <Setter Property="Foreground" Value="#1B1B1B" />
-            <Setter Property="Background" Value="#FFFFFF" />
-            <Setter Property="BorderBrush" Value="#E0E0E0" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.PrimaryText}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Card}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
@@ -794,20 +878,20 @@ $theme = @{
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="ButtonBorder" Property="Background" Value="#F5F5F5" />
-                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#8A8A8A" />
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource Brush.Callout}" />
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{DynamicResource Brush.Muted}" />
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="ButtonBorder" Property="Background" Value="#E0E0E0" />
-                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#0078D4" />
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource Brush.Border}" />
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
                             </Trigger>
                             <Trigger Property="IsFocused" Value="True">
-                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#0078D4" />
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="ButtonBorder" Property="Background" Value="#F5F5F5" />
-                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#E0E0E0" />
-                                <Setter Property="Foreground" Value="#8A8A8A" />
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="{DynamicResource Brush.Callout}" />
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Muted}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -821,16 +905,16 @@ $theme = @{
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="8" Padding="16,12" Margin="0,0,0,12">
+        <Border Grid.Row="0" Background="{DynamicResource Brush.Card}" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1" CornerRadius="8" Padding="16,12" Margin="0,0,0,12">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Vertical">
-                    <TextBlock Text="Enterprise Defaults Viewer" FontSize="20" FontWeight="SemiBold" Foreground="#1B1B1B" />
+                    <TextBlock Text="Enterprise Defaults Viewer" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource Brush.PrimaryText}" />
                     <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                        <TextBlock Name="SubtitleTextBlock" FontSize="12" Foreground="#606060" VerticalAlignment="Center" />
+                        <TextBlock Name="SubtitleTextBlock" FontSize="12" Foreground="{DynamicResource Brush.SubtleText}" VerticalAlignment="Center" />
                         <Button Name="BrowseConfigsPathButton"
                                 Content="Browse..."
                                 Style="{StaticResource FluentButton}"
@@ -841,7 +925,16 @@ $theme = @{
                     </StackPanel>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
-                    <TextBlock Text="OS:" FontSize="12" Foreground="#606060" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <Button Name="ThemeToggleButton"
+                            Content="$( if ($script:themeMode -eq "Dark") { [System.Char]::ConvertFromUtf32(0x1F319) } else { [System.Char]::ConvertFromUtf32(0x2600) } )"
+                            ToolTip="$( if ($script:themeMode -eq "Dark") { "Switch to light theme" } else { "Switch to dark theme" } )"
+                            Style="{StaticResource FluentButton}"
+                            Height="28"
+                            Width="32"
+                            Padding="0"
+                            FontSize="14"
+                            Margin="0,0,16,0" />
+                    <TextBlock Text="OS:" FontSize="12" Foreground="{DynamicResource Brush.SubtleText}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0" />
                     <ComboBox Name="OsComboBox" Style="{StaticResource FluentComboBox}" MinWidth="200" Margin="0,0,16,0">
                         <ComboBox.ItemTemplate>
                             <DataTemplate>
@@ -849,7 +942,7 @@ $theme = @{
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
-                    <TextBlock Text="Model:" FontSize="12" Foreground="#606060" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <TextBlock Text="Model:" FontSize="12" Foreground="{DynamicResource Brush.SubtleText}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0" />
                     <ComboBox Name="ModelComboBox" Style="{StaticResource FluentComboBox}" MinWidth="120" />
                 </StackPanel>
             </Grid>
@@ -862,13 +955,13 @@ $theme = @{
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Background="#FFFFFF" BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="8" Padding="8">
+            <Border Grid.Column="0" Background="{DynamicResource Brush.Card}" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1" CornerRadius="8" Padding="8">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <TextBlock Name="ListHeaderTextBlock" Grid.Row="0" FontSize="13" FontWeight="SemiBold" Foreground="#1B1B1B" Margin="4,4,4,8" />
+                    <TextBlock Name="ListHeaderTextBlock" Grid.Row="0" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource Brush.PrimaryText}" Margin="4,4,4,8" />
                     <ListBox Name="ConfigsListBox" Grid.Row="1"
                              DisplayMemberPath="Name"
                              BorderThickness="0"
@@ -878,7 +971,7 @@ $theme = @{
                 </Grid>
             </Border>
 
-            <Border Grid.Column="2" Background="#FFFFFF" BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="8" Padding="16">
+            <Border Grid.Column="2" Background="{DynamicResource Brush.Card}" BorderBrush="{DynamicResource Brush.Border}" BorderThickness="1" CornerRadius="8" Padding="16">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Name="DetailsPanel" />
                 </ScrollViewer>
@@ -898,6 +991,7 @@ $subtitleTextBlock = [System.Windows.Controls.TextBlock] $window.FindName("Subti
 $osComboBox = [System.Windows.Controls.ComboBox] $window.FindName("OsComboBox")
 $modelComboBox = [System.Windows.Controls.ComboBox] $window.FindName("ModelComboBox")
 $browseConfigsPathButton = [System.Windows.Controls.Button] $window.FindName("BrowseConfigsPathButton")
+$themeToggleButton = [System.Windows.Controls.Button] $window.FindName("ThemeToggleButton")
 
 function Set-SubtitleText {
     $subtitleTextBlock.Text = "Configuration profiles viewer. Path: $ConfigsPath"
@@ -1244,8 +1338,8 @@ function Render-Config {
         $errorCard = [System.Windows.Controls.Border]::new()
         $errorCard.Padding = [System.Windows.Thickness]::new(14)
         $errorCard.CornerRadius = [System.Windows.CornerRadius]::new(8)
-        $errorCard.Background = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(254, 226, 226))
-        $errorCard.BorderBrush = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(248, 113, 113))
+        $errorCard.Background = $theme.ErrorCardBackgroundBrush
+        $errorCard.BorderBrush = $theme.ErrorCardBorderBrush
         $errorCard.BorderThickness = [System.Windows.Thickness]::new(1)
 
         $errorPanel = [System.Windows.Controls.StackPanel]::new()
@@ -1331,6 +1425,52 @@ function Reload-Configs {
     Apply-ConfigFilter
 }
 
+function Set-AppTheme {
+    # Central theme-switch entry point: rebuilds the brush set, repaints all
+    # DynamicResource-bound XAML chrome, restyles the toggle button, re-applies the
+    # DWM caption/dark-mode attributes on the live window, and re-renders the details
+    # pane (which holds direct brush references baked in at build time).
+    param(
+        [ValidateSet("Light", "Dark")]
+        [System.String] $Mode
+    )
+
+    $script:themeMode = $Mode
+    $script:theme = Get-ThemeBrushes -Mode $Mode
+    $theme = $script:theme
+
+    foreach ($brushName in @("PrimaryText", "SubtleText", "Muted", "Card", "Border", "Window", "SectionBackground", "Badge", "BadgeHover", "Callout", "Error", "ErrorCardBackground", "ErrorCardBorder")) {
+        $window.Resources["Brush.$brushName"] = $script:theme["${brushName}Brush"]
+    }
+
+    if ($Mode -eq "Dark") {
+        $themeToggleButton.Content = [System.Char]::ConvertFromUtf32(0x1F319)
+        $themeToggleButton.ToolTip = "Switch to light theme"
+    }
+    else {
+        $themeToggleButton.Content = [System.Char]::ConvertFromUtf32(0x2600)
+        $themeToggleButton.ToolTip = "Switch to dark theme"
+    }
+
+    $helper = [System.Windows.Interop.WindowInteropHelper]::new($window)
+    if ($helper.Handle -ne [System.IntPtr]::Zero) {
+        $windowColor = $script:theme.WindowBrush.Color
+        $captionColor = ([System.Int32] $windowColor.B -shl 16) -bor ([System.Int32] $windowColor.G -shl 8) -bor [System.Int32] $windowColor.R
+        [void] [DwmHelper]::DwmSetWindowAttribute($helper.Handle, [DwmHelper]::DWMWA_CAPTION_COLOR, [ref] $captionColor, 4)
+
+        $darkModeValue = if ($Mode -eq "Dark") { 1 } else { 0 }
+        [void] [DwmHelper]::DwmSetWindowAttribute($helper.Handle, [DwmHelper]::DWMWA_USE_IMMERSIVE_DARK_MODE, [ref] $darkModeValue, 4)
+    }
+
+    if ($null -ne $configsListBox.SelectedItem) {
+        Render-Config -Entry $configsListBox.SelectedItem
+    }
+    else {
+        $detailsPanel.Children.Clear()
+        Add-EmptyMessage -Message "Select a configuration file from the left pane to view details."
+    }
+}
+
 $configsListBox.Add_SelectionChanged({
     Render-Config -Entry $configsListBox.SelectedItem
 })
@@ -1369,14 +1509,23 @@ $browseConfigsPathButton.Add_Click({
     }
 })
 
+$themeToggleButton.Add_Click({
+    $nextMode = if ($script:themeMode -eq "Dark") { "Light" } else { "Dark" }
+    Set-AppTheme -Mode $nextMode
+})
+
 Reload-Configs
 
-# Apply #F3F3F3 caption colour once the HWND exists (Windows 11 build 22000+)
-# COLORREF is 0x00BBGGRR; all channels are 0xF3 so the value is identical in any byte order
+# Apply the initial caption colour and dark/light title bar mode once the HWND exists
+# (Windows 11 build 22000+ for caption colour; DWMWA_USE_IMMERSIVE_DARK_MODE for the frame)
 $window.Add_SourceInitialized({
     $helper = [System.Windows.Interop.WindowInteropHelper]::new($window)
-    $captionColor = 0x00F3F3F3
+    $windowColor = $script:theme.WindowBrush.Color
+    $captionColor = ([System.Int32] $windowColor.B -shl 16) -bor ([System.Int32] $windowColor.G -shl 8) -bor [System.Int32] $windowColor.R
     [void] [DwmHelper]::DwmSetWindowAttribute($helper.Handle, [DwmHelper]::DWMWA_CAPTION_COLOR, [ref] $captionColor, 4)
+
+    $darkModeValue = if ($script:themeMode -eq "Dark") { 1 } else { 0 }
+    [void] [DwmHelper]::DwmSetWindowAttribute($helper.Handle, [DwmHelper]::DWMWA_USE_IMMERSIVE_DARK_MODE, [ref] $darkModeValue, 4)
 })
 
 [void] $window.ShowDialog()
