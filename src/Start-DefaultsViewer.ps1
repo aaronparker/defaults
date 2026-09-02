@@ -19,6 +19,7 @@ $WarningPreference = [System.Management.Automation.ActionPreference]::SilentlyCo
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
+Add-Type -AssemblyName System.Windows.Forms
 
 # P/Invoke wrapper used to set the OS title-bar caption colour via DWM
 Add-Type -TypeDefinition @"
@@ -768,6 +769,51 @@ $theme = @{
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Fluent secondary Button: rounded, colour-reactive hover/pressed/focus states -->
+        <Style x:Key="FluentButton" TargetType="Button">
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="#1B1B1B" />
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="BorderBrush" Value="#E0E0E0" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#F5F5F5" />
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#8A8A8A" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#E0E0E0" />
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#0078D4" />
+                            </Trigger>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#0078D4" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#F5F5F5" />
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#E0E0E0" />
+                                <Setter Property="Foreground" Value="#8A8A8A" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
     <Grid Margin="16">
         <Grid.RowDefinitions>
@@ -783,7 +829,16 @@ $theme = @{
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Vertical">
                     <TextBlock Text="Enterprise Defaults Viewer" FontSize="20" FontWeight="SemiBold" Foreground="#1B1B1B" />
-                    <TextBlock Name="SubtitleTextBlock" Margin="0,4,0,0" FontSize="12" Foreground="#606060" />
+                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                        <TextBlock Name="SubtitleTextBlock" FontSize="12" Foreground="#606060" VerticalAlignment="Center" />
+                        <Button Name="BrowseConfigsPathButton"
+                                Content="Browse..."
+                                Style="{StaticResource FluentButton}"
+                                Height="22"
+                                Padding="10,0"
+                                FontSize="11"
+                                Margin="10,0,0,0" />
+                    </StackPanel>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
                     <TextBlock Text="OS:" FontSize="12" Foreground="#606060" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0" />
@@ -842,8 +897,13 @@ $listHeaderTextBlock = [System.Windows.Controls.TextBlock] $window.FindName("Lis
 $subtitleTextBlock = [System.Windows.Controls.TextBlock] $window.FindName("SubtitleTextBlock")
 $osComboBox = [System.Windows.Controls.ComboBox] $window.FindName("OsComboBox")
 $modelComboBox = [System.Windows.Controls.ComboBox] $window.FindName("ModelComboBox")
+$browseConfigsPathButton = [System.Windows.Controls.Button] $window.FindName("BrowseConfigsPathButton")
 
-$subtitleTextBlock.Text = "Configuration profiles viewer. Path: $ConfigsPath"
+function Set-SubtitleText {
+    $subtitleTextBlock.Text = "Configuration profiles viewer. Path: $ConfigsPath"
+}
+
+Set-SubtitleText
 
 $schemaMap = Get-SchemaMap -RemoteSchemaUrl $SchemaUrl
 $script:allConfigEntries = @()
@@ -1281,6 +1341,32 @@ $osComboBox.Add_SelectionChanged({
 
 $modelComboBox.Add_SelectionChanged({
     Apply-ConfigFilter
+})
+
+$browseConfigsPathButton.Add_Click({
+    $folderBrowser = [System.Windows.Forms.FolderBrowserDialog]::new()
+    try {
+        $folderBrowser.Description = "Select a folder containing configuration profiles"
+        $folderBrowser.ShowNewFolderButton = $false
+
+        # UseDescriptionForTitle only exists on .NET Core 3.0+ / .NET 5+ builds of Windows Forms
+        if ($null -ne $folderBrowser.PSObject.Properties["UseDescriptionForTitle"]) {
+            $folderBrowser.UseDescriptionForTitle = $true
+        }
+
+        if (Test-Path -Path $ConfigsPath -PathType "Container") {
+            $folderBrowser.SelectedPath = (Resolve-Path -Path $ConfigsPath).Path
+        }
+
+        if ($folderBrowser.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+            $script:ConfigsPath = $folderBrowser.SelectedPath
+            Set-SubtitleText
+            Reload-Configs
+        }
+    }
+    finally {
+        $folderBrowser.Dispose()
+    }
 })
 
 Reload-Configs
